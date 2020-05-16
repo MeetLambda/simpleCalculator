@@ -6,12 +6,16 @@ import Control.Semigroupoid ((<<<))
 import Data.Eq (class Eq)
 import Data.EuclideanRing ((/))
 import Data.Function (($), const)
-import Data.Functor ((<$>))
+import Data.Functor (map, (<$>))
+import Data.List (snoc)
+import Data.List.Types (List(..), (:))
 import Data.Maybe (Maybe(..))
 import Data.Ord (class Ord)
 import Data.Ring ((-))
+import Data.Semigroup ((<>))
 import Data.Semiring ((+), (*))
 import Data.Show (show)
+import Data.Tuple (Tuple(..))
 import Data.Unit (Unit, unit)
 import Effect.Aff.Class (class MonadAff)
 import Effect.Console (log)
@@ -25,6 +29,7 @@ type Surface    = HTML.HTML
 data Digit = D0 | D1 | D2 | D3 | D4 | D5 | D6 | D7 | D8 | D9 
 data Action     = NoAction
                 | ClickDigit Digit
+                | ClickDot
                 | Cancel
                 -- | Add -- | SubComponentOutput SubComponent.S_Output
 data Query a    = GetState (State -> a)
@@ -32,42 +37,28 @@ type Input      = Unit
 data Output     = NoOutput      -- aka Message
 
 data Operator   = Addition | Subtraction | Multiplication | Division
+type InputValue = { integer :: List Digit, decimal :: List Digit }
+
 type State      = {
     memory                   :: Maybe Number,
     operator                 :: Maybe Operator,
     isInsertingDecimalValues :: Boolean,
-    input                    :: Maybe Number
+--  input                    :: Maybe Number
+    input                    :: Tuple (List Digit) (List Digit),
+    input'                   :: InputValue
 }
 type Slots      = ()
-
-{-
-The type variables involved:
-- `surface` is the type that will be rendered by the component, usually `HTML`
-* `state` is the component's state
-- `query` is the query algebra; the requests that can be made of the component
-* `action` is the type of actions; messages internal to the component that can be evaluated
-* `slots` is the set of slots for addressing child components
-- `input` is the input value that will be received when the parent of this component renders
-- `output` is the type of messages the component can raise
-- `m` is the effect monad used during evaluation
-
-
-The values in the record:
-- `initialState` is a function that accepts an input value and produces the state the component will start with.
-  If the input value is unused (`Unit`), or irrelevant to the state construction, this will often be `const ?someInitialStateValue`.
-- `render` is a function that accepts the component's current state and produces a value to render (`HTML` usually).
-  The rendered output can raise actions that will be handled in `eval`.
-- `eval` is a function that handles the `HalogenQ` algebra that deals with component lifecycle, handling actions, and responding to requests.
-
--}
 
 initialState :: Input -> State
 initialState _ = {
     memory:   Nothing,
     operator: Nothing,
-    input:    Nothing,
+--  input:    Nothing,
+    input:    Tuple Nil Nil,
+    input':   { integer: Nil, decimal: Nil },
     isInsertingDecimalValues: false
 }
+initialState' = initialState unit
 
 component :: forall m. MonadAff m => Halogen.Component Surface Query Input Output m
 component = Halogen.mkComponent {
@@ -83,31 +74,37 @@ component = Halogen.mkComponent {
                     -- :: HalogenQ Query Action Input ~> HalogenM State Action Slots Output m
 }
 
-showInput :: Maybe Number -> String
-showInput Nothing = "0.0"
-showInput (Just n) = show n
+showDigits :: (List Digit) -> String
+showDigits Nil = ""
+showDigits (x:xs) = show (valueOf x) <> showDigits xs
 
-valueOf :: Digit -> Number     -- verify if 'coercible' is applicable
-valueOf D0 = 0.0
-valueOf D1 = 1.0
-valueOf D2 = 2.0
-valueOf D3 = 3.0
-valueOf D4 = 4.0
-valueOf D5 = 5.0
-valueOf D6 = 6.0
-valueOf D7 = 7.0
-valueOf D8 = 8.0
-valueOf D9 = 9.0
+showInput :: (Tuple (List Digit) (List Digit)) -> Boolean -> String
+showInput (Tuple Nil Nil) false = "0"
+showInput (Tuple Nil Nil) true = "0."
+showInput (Tuple xs Nil)  false = showDigits xs
+showInput (Tuple xs Nil)  true  = showDigits xs <> "."
+showInput (Tuple Nil ys)  _     = "0." <> showDigits ys
+showInput (Tuple xs ys)   _     = showDigits xs <> "." <> showDigits ys
 
-updateInput :: Maybe Number -> Boolean -> Digit -> Maybe Number
-updateInput Nothing  false d = Just (valueOf d)
-updateInput (Just i) false d = Just ((i * 10.0) + (valueOf d))
-updateInput Nothing  true  d = Just ((valueOf d) / 10.0)
-updateInput (Just i) true  d = Just (i + (valueOf d))
+valueOf :: Digit -> Int     -- verify if 'coercible' is applicable
+valueOf D0 = 0
+valueOf D1 = 1
+valueOf D2 = 2
+valueOf D3 = 3
+valueOf D4 = 4
+valueOf D5 = 5
+valueOf D6 = 6
+valueOf D7 = 7
+valueOf D8 = 8
+valueOf D9 = 9
+
+updateInput :: (Tuple (List Digit) (List Digit)) -> Boolean -> Digit -> (Tuple (List Digit) (List Digit))
+updateInput (Tuple xs ys) false d = Tuple (snoc xs d) ys
+updateInput (Tuple xs ys) true  d = Tuple  xs        (snoc ys d)
 
 render :: forall m. {-MonadAff m =>-} State -> Halogen.ComponentHTML Action Slots m
 render (state) = HTML.div [] [
-    HTML.div [HTML.Properties.class_ (Halogen.ClassName "display")] [HTML.text (showInput state.input)],
+    HTML.div [HTML.Properties.class_ (Halogen.ClassName "display")] [HTML.text (showInput state.input state.isInsertingDecimalValues)],
     HTML.table [] [
         HTML.tbody [] [
             HTML.tr [] [
@@ -130,7 +127,7 @@ render (state) = HTML.div [] [
             ],
             HTML.tr [] [
                 HTML.td [HTML.Properties.colSpan 2, HTML.Events.onClick \_ -> Just (ClickDigit D0)] [HTML.text "0"],
-                HTML.td [HTML.Properties.class_ (Halogen.ClassName "decimal")] [HTML.text "."],
+                HTML.td [HTML.Properties.class_ (Halogen.ClassName "decimal"), HTML.Events.onClick \_ -> Just ClickDot] [HTML.text "."],
                 HTML.td [HTML.Properties.class_ (Halogen.ClassName "operator")] [HTML.text "+"]
             ],
             HTML.tr [] [
@@ -148,8 +145,10 @@ handleAction = case _ of
         pure unit
     ClickDigit d -> do
         Halogen.modify_ (\state -> state { input = updateInput state.input state.isInsertingDecimalValues d })
+    ClickDot -> do
+        Halogen.modify_ (\state -> state { isInsertingDecimalValues = true })
     Cancel -> do
-        Halogen.modify_ (\state -> state { input = Nothing, isInsertingDecimalValues = false })
+        Halogen.modify_ (\state -> state { input = initialState'.input, isInsertingDecimalValues = false })
     -- Subtract -> do
     --     Halogen.liftEffect $ log "subtract"
     --     Halogen.modify_ (\(State s) -> State (s - 1))
