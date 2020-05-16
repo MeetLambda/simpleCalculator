@@ -37,15 +37,15 @@ type Input      = Unit
 data Output     = NoOutput      -- aka Message
 
 data Operator   = Addition | Subtraction | Multiplication | Division
-type InputValue = { integer :: List Digit, decimal :: List Digit }
+type InputValue  = Tuple (List Digit) (List Digit)
+type InputValue' = { integer :: List Digit, decimal :: List Digit }
 
 type State      = {
     memory                   :: Maybe Number,
     operator                 :: Maybe Operator,
     isInsertingDecimalValues :: Boolean,
---  input                    :: Maybe Number
-    input                    :: Tuple (List Digit) (List Digit),
-    input'                   :: InputValue
+    input                    :: InputValue,
+    input'                   :: InputValue'
 }
 type Slots      = ()
 
@@ -53,11 +53,11 @@ initialState :: Input -> State
 initialState _ = {
     memory:   Nothing,
     operator: Nothing,
---  input:    Nothing,
     input:    Tuple Nil Nil,
     input':   { integer: Nil, decimal: Nil },
     isInsertingDecimalValues: false
 }
+initialState' :: State
 initialState' = initialState unit
 
 component :: forall m. MonadAff m => Halogen.Component Surface Query Input Output m
@@ -78,13 +78,21 @@ showDigits :: (List Digit) -> String
 showDigits Nil = ""
 showDigits (x:xs) = show (valueOf x) <> showDigits xs
 
-showInput :: (Tuple (List Digit) (List Digit)) -> Boolean -> String
+showInput :: InputValue -> Boolean -> String
 showInput (Tuple Nil Nil) false = "0"
 showInput (Tuple Nil Nil) true = "0."
 showInput (Tuple xs Nil)  false = showDigits xs
 showInput (Tuple xs Nil)  true  = showDigits xs <> "."
 showInput (Tuple Nil ys)  _     = "0." <> showDigits ys
 showInput (Tuple xs ys)   _     = showDigits xs <> "." <> showDigits ys
+
+showInput' :: InputValue' -> Boolean -> String
+showInput' {integer: Nil, decimal: Nil} false = "0"
+showInput' {integer: Nil, decimal: Nil} true = "0."
+showInput' {integer: xs,  decimal: Nil}  false = showDigits xs
+showInput' {integer: xs,  decimal: Nil}  true  = showDigits xs <> "."
+showInput' {integer: Nil, decimal: ys}   _     = "0." <> showDigits ys
+showInput' {integer: xs,  decimal: ys}   _     = showDigits xs <> "." <> showDigits ys
 
 valueOf :: Digit -> Int     -- verify if 'coercible' is applicable
 valueOf D0 = 0
@@ -98,13 +106,18 @@ valueOf D7 = 7
 valueOf D8 = 8
 valueOf D9 = 9
 
-updateInput :: (Tuple (List Digit) (List Digit)) -> Boolean -> Digit -> (Tuple (List Digit) (List Digit))
+updateInput :: InputValue -> Boolean -> Digit -> InputValue
 updateInput (Tuple xs ys) false d = Tuple (snoc xs d) ys
 updateInput (Tuple xs ys) true  d = Tuple  xs        (snoc ys d)
 
+updateInput' :: InputValue' -> Boolean -> Digit -> InputValue'
+updateInput' {integer: xs, decimal: ys} false d = {integer: snoc xs d, decimal: ys}
+updateInput' {integer: xs, decimal: ys} true  d = {integer: xs,        decimal: snoc ys d}
+
 render :: forall m. {-MonadAff m =>-} State -> Halogen.ComponentHTML Action Slots m
 render (state) = HTML.div [] [
-    HTML.div [HTML.Properties.class_ (Halogen.ClassName "display")] [HTML.text (showInput state.input state.isInsertingDecimalValues)],
+    HTML.div [HTML.Properties.class_ (Halogen.ClassName "display")] [HTML.text (showInput  state.input  state.isInsertingDecimalValues)],
+    HTML.div [HTML.Properties.class_ (Halogen.ClassName "display")] [HTML.text (showInput' state.input' state.isInsertingDecimalValues)],
     HTML.table [] [
         HTML.tbody [] [
             HTML.tr [] [
@@ -144,7 +157,10 @@ handleAction = case _ of
     NoAction ->
         pure unit
     ClickDigit d -> do
-        Halogen.modify_ (\state -> state { input = updateInput state.input state.isInsertingDecimalValues d })
+        Halogen.modify_ (\state -> state {
+            input  = updateInput  state.input  state.isInsertingDecimalValues d,
+            input' = updateInput' state.input' state.isInsertingDecimalValues d
+        })
     ClickDot -> do
         Halogen.modify_ (\state -> state { isInsertingDecimalValues = true })
     Cancel -> do
