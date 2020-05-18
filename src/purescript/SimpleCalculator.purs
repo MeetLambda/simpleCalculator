@@ -3,7 +3,8 @@ module SimpleCalculator where
 import Data.Eq ((==))
 import Data.EuclideanRing ((/))
 import Data.Functor (map)
-import Data.Int (round)
+import Data.HeytingAlgebra ((||))
+import Data.Int as Data.Int
 import Data.List (List(..), foldl, snoc)
 import Data.Maybe (Maybe(..))
 import Data.Ring ((-))
@@ -12,7 +13,7 @@ import Data.Semiring ((+), (*))
 import Data.Show (class Show, show)
 import Data.String.CodeUnits (toCharArray)
 import Global (readFloat)
-import Math (round) as Math
+import Math as Math
 
 data Key = K_0 | K_1 | K_2 | K_3 | K_4 | K_5 | K_6 | K_7 | K_8 | K_9 | K_Dot | K_Add | K_Subtract | K_Divide | K_Multiple | K_Equal | K_C | K_AC | NOOP
 
@@ -26,51 +27,57 @@ operation Division       = (/)
 operation Multiplication = (*)
 
 type Status = {
-    input           :: List Key,
-    memory          :: Maybe Number,
-    operator        :: Maybe Operator,
-    cleanDisplay    :: Boolean,
-    digitInput      :: Boolean,
-    display         :: String
+    input                   :: List Key,
+    memory                  :: Maybe Number,
+    operator                :: Maybe Operator,
+    cleanDisplayOnNextKey   :: Boolean,
+    isInsertingDecimalValues:: Boolean,
+    display                 :: String
 }
+
+emptyDisplayContent :: String
+emptyDisplayContent = "0"
 
 initialState :: Status
 initialState = {
-    input           : Nil,
-    memory          : Nothing,
-    operator        : Nothing,
-    cleanDisplay    : true,
-    digitInput      : false,
-    display         : "0"
+    input                       : Nil,
+    memory                      : Nothing,
+    operator                    : Nothing,
+    cleanDisplayOnNextKey       : true,
+    isInsertingDecimalValues    : false,
+    display                     : emptyDisplayContent
 }
 
 toString :: (List Key) -> String
 toString xs = foldl (<>) "" (map show xs)  
 
 toNumber :: List Key -> Number
-toNumber xs = readFloat (if s == "" then "0" else s)
+toNumber xs = readFloat (value)
     where
-        s = toString xs
-
-computeMemory :: (Maybe Number) -> (Maybe Operator) -> Number -> Number
-computeMemory (Just m) (Just o) n  = (operation o) m n
-computeMemory Nothing (Just o) n = (operation o) 0.0 n
-computeMemory (Just m) Nothing 0.0 = m
-computeMemory _ Nothing n = n
+        value = if text == "" then "0" else text
+        text  = toString xs
+          
+computeMemory :: (Maybe Operator) -> (Maybe Number) -> Number -> Number
+computeMemory (Just o) (Just m) n    = (operation o) m   n
+computeMemory (Just o)  Nothing n    = (operation o) 0.0 n
+computeMemory  Nothing (Just m) 0.0  = m
+computeMemory  Nothing  _       n    = n
 
 computeStatusMemory :: Status -> Number
-computeStatusMemory s = computeMemory s.memory s.operator (toNumber s.input)
+computeStatusMemory s = computeMemory s.operator s.memory (toNumber s.input)
 
 computeStatusDisplay :: Status -> Key -> String
-computeStatusDisplay s K_Dot = if s.digitInput then s.display else ((if s.cleanDisplay then "0" else s.display) <> show K_Dot)
-computeStatusDisplay s K_Equal = if ((computeStatusMemory s) - Math.round (computeStatusMemory s) == 0.0 ) then show (round (computeStatusMemory s)) else show (computeStatusMemory s)
-computeStatusDisplay s k = if s.cleanDisplay then show k else (if s.display == "0" then "" else s.display) <> show k
+computeStatusDisplay s K_Dot    = if s.isInsertingDecimalValues then s.display else ((if s.cleanDisplayOnNextKey then emptyDisplayContent else s.display) <> show K_Dot)
+computeStatusDisplay s K_Equal  = if (x == Math.round x) then show (Data.Int.round x) else show x
+                                        where x = computeStatusMemory s 
+computeStatusDisplay s k        = if (s.cleanDisplayOnNextKey || (s.display == emptyDisplayContent)) then show k else s.display <> show k
 
 computeStatusInput :: Status -> Key -> List Key
-computeStatusInput s K_Dot = if s.digitInput then s.input else (snoc s.input K_Dot)
-computeStatusInput s k = snoc s.input k
+computeStatusInput s K_Dot  = if s.isInsertingDecimalValues then s.input else (snoc s.input K_Dot)
+computeStatusInput s k      = snoc s.input k
 
 handleKey :: Status -> Key -> Status
+handleKey s NOOP =          s
 handleKey s K_AC =          initialState
 handleKey s K_C =           initialState { memory = s.memory,                       operator = s.operator }
 handleKey s K_Equal =       initialState { memory = Just (computeStatusMemory s),                                   display = (computeStatusDisplay s K_Equal) }
@@ -78,8 +85,8 @@ handleKey s K_Add =         initialState { memory = Just (computeStatusMemory s)
 handleKey s K_Subtract =    initialState { memory = Just (computeStatusMemory s),   operator = Just Subtraction,    display = s.display }
 handleKey s K_Multiple =    initialState { memory = Just (computeStatusMemory s),   operator = Just Multiplication, display = s.display }
 handleKey s K_Divide =      initialState { memory = Just (computeStatusMemory s),   operator = Just Division,       display = s.display }
-handleKey s K_Dot =         s { input = (computeStatusInput s K_Dot),   display = (computeStatusDisplay s K_Dot),   cleanDisplay = false, digitInput = true }
-handleKey s k =             s { input = (computeStatusInput s k),       display = (computeStatusDisplay s k),       cleanDisplay = false }
+handleKey s K_Dot =         s { input = (computeStatusInput s K_Dot),   display = (computeStatusDisplay s K_Dot),   cleanDisplayOnNextKey = false, isInsertingDecimalValues = true }
+handleKey s k =             s { input = (computeStatusInput s k),       display = (computeStatusDisplay s k),       cleanDisplayOnNextKey = false }
 
 charToKey :: Char -> Key
 charToKey '0' = K_0
