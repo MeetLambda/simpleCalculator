@@ -48,7 +48,9 @@ toString :: (List Key) -> String
 toString xs = foldl (<>) "" (map show xs)  
 
 toNumber :: List Key -> Number
-toNumber xs = readFloat (if toString xs == "" then "0" else toString xs)
+toNumber xs = readFloat (if s == "" then "0" else s)
+    where
+        s = toString xs
 
 computeMemory :: (Maybe Number) -> (Maybe Operator) -> Number -> Number
 computeMemory (Just m) (Just o) n  = (operation o) m n
@@ -59,16 +61,25 @@ computeMemory _ Nothing n = n
 computeStatusMemory :: Status -> Number
 computeStatusMemory s = computeMemory s.memory s.operator (toNumber s.input)
 
+computeStatusDisplay :: Status -> Key -> String
+computeStatusDisplay s K_Dot = if s.digitInput then s.display else ((if s.cleanDisplay then "0" else s.display) <> show K_Dot)
+computeStatusDisplay s K_Equal = if ((computeStatusMemory s) - Math.round (computeStatusMemory s) == 0.0 ) then show (round (computeStatusMemory s)) else show (computeStatusMemory s)
+computeStatusDisplay s k = if s.cleanDisplay then show k else (if s.display == "0" then "" else s.display) <> show k
+
+computeStatusInput :: Status -> Key -> List Key
+computeStatusInput s K_Dot = if s.digitInput then s.input else (snoc s.input K_Dot)
+computeStatusInput s k = snoc s.input k
+
 handleKey :: Status -> Key -> Status
 handleKey s K_AC =          initialState
-handleKey s K_C =           initialState { memory = s.memory, operator = s.operator }
-handleKey s K_Equal =       initialState { memory = Just (computeStatusMemory s), display = if ((computeStatusMemory s) - Math.round (computeStatusMemory s) == 0.0 ) then show (round (computeStatusMemory s)) else show (computeStatusMemory s) }
-handleKey s K_Add =         initialState { memory = Just (computeStatusMemory s), operator = Just Addition, display = s.display }
-handleKey s K_Subtract =    initialState { memory = Just (computeStatusMemory s), operator = Just Subtraction, display = s.display }
-handleKey s K_Multiple =    initialState { memory = Just (computeStatusMemory s), operator = Just Multiplication, display = s.display }
-handleKey s K_Divide =      initialState { memory = Just (computeStatusMemory s), operator = Just Division, display = s.display }
-handleKey s K_Dot = s { input = if s.digitInput then s.input else snoc s.input K_Dot, display = (if s.cleanDisplay then "0" else s.display) <> show K_Dot, cleanDisplay = false, digitInput = true}
-handleKey s k = s { input = snoc s.input k, display = (if s.cleanDisplay then show k else (if s.display == "0" then "" else s.display) <> show k), cleanDisplay = false }
+handleKey s K_C =           initialState { memory = s.memory,                       operator = s.operator }
+handleKey s K_Equal =       initialState { memory = Just (computeStatusMemory s),                                   display = (computeStatusDisplay s K_Equal) }
+handleKey s K_Add =         initialState { memory = Just (computeStatusMemory s),   operator = Just Addition,       display = s.display }
+handleKey s K_Subtract =    initialState { memory = Just (computeStatusMemory s),   operator = Just Subtraction,    display = s.display }
+handleKey s K_Multiple =    initialState { memory = Just (computeStatusMemory s),   operator = Just Multiplication, display = s.display }
+handleKey s K_Divide =      initialState { memory = Just (computeStatusMemory s),   operator = Just Division,       display = s.display }
+handleKey s K_Dot =         s { input = (computeStatusInput s K_Dot),   display = (computeStatusDisplay s K_Dot),   cleanDisplay = false, digitInput = true }
+handleKey s k =             s { input = (computeStatusInput s k),       display = (computeStatusDisplay s k),       cleanDisplay = false }
 
 charToKey :: Char -> Key
 charToKey '0' = K_0
@@ -119,7 +130,6 @@ instance showKey :: Show Key where
     show K_C =          "C"
     show K_AC =         "#"
     show NOOP =         ""
-
 
 -- instance showDigit :: Show Digit where
 --     show D0 = "0"

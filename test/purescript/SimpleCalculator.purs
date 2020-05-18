@@ -47,3 +47,6 @@ simpleCalculatorTestSuite =
             Assert.equal    "5"   (applyKeys "4.5-.5=+1=")
             Assert.equal    "4"   (applyKeys "4.5-.5=1+3=")
             Assert.equal    "20.5" (applyKeys "10.3+4.1+6.1=")
+            Assert.equal    "1.33"   (applyKeys "1..3.3")
+            -- Assert.equal    "-7.9" (applyKeys ".3/3-4*3.6C2=")
+            -- Assert.equal    "11" (applyKeys "2+3===")
