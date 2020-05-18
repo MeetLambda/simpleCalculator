@@ -33,3 +33,6 @@ The first command will invoke `spago` to continuosly compile the PureScript file
     >> starting...
     Server running at http://localhost:1234 
     ✨  Built in 2.36s.
+
+This is what the calculator should look like:
+![screenshot](./screenshot.png "Screenshot")
