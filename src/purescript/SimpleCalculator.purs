@@ -3,14 +3,16 @@ module SimpleCalculator where
 import Data.Eq ((==))
 import Data.EuclideanRing ((/))
 import Data.Functor (map)
-import Data.Maybe (Maybe(..))
+import Data.Int (round)
 import Data.List (List(..), foldl, snoc)
+import Data.Maybe (Maybe(..))
 import Data.Ring ((-))
 import Data.Semigroup ((<>))
 import Data.Semiring ((+), (*))
 import Data.Show (class Show, show)
 import Data.String.CodeUnits (toCharArray)
 import Global (readFloat)
+import Math (round) as Math
 
 data Key = K_0 | K_1 | K_2 | K_3 | K_4 | K_5 | K_6 | K_7 | K_8 | K_9 | K_Dot | K_Add | K_Subtract | K_Divide | K_Multiple | K_Equal | K_C | K_AC | NOOP
 
@@ -24,36 +26,49 @@ operation Division       = (/)
 operation Multiplication = (*)
 
 type Status = {
-    input    :: List Key,
-    memory   :: Maybe Number,
-    operator :: Maybe Operator,
-    display  :: String
+    input           :: List Key,
+    memory          :: Maybe Number,
+    operator        :: Maybe Operator,
+    cleanDisplay    :: Boolean,
+    digitInput      :: Boolean,
+    display         :: String
 }
 
 initialState :: Status
 initialState = {
-    input    : Nil,
-    memory   : Nothing,
-    operator : Nothing,
-    display  : "0"
+    input           : Nil,
+    memory          : Nothing,
+    operator        : Nothing,
+    cleanDisplay    : true,
+    digitInput      : false,
+    display         : "0"
 }
 
 toString :: (List Key) -> String
 toString xs = foldl (<>) "" (map show xs)  
 
 toNumber :: List Key -> Number
-toNumber xs = readFloat (toString xs)
+toNumber xs = readFloat (if toString xs == "" then "0" else toString xs)
 
 computeMemory :: (Maybe Number) -> (Maybe Operator) -> Number -> Number
 computeMemory (Just m) (Just o) n  = (operation o) m n
-computeMemory Nothing Nothing n = n
-computeMemory _ _ _ = 0.0
+computeMemory Nothing (Just o) n = (operation o) 0.0 n
+computeMemory (Just m) Nothing 0.0 = m
+computeMemory _ Nothing n = n
+
+computeStatusMemory :: Status -> Number
+computeStatusMemory s = computeMemory s.memory s.operator (toNumber s.input)
 
 handleKey :: Status -> Key -> Status
-handleKey s K_Equal = s { memory = Just (computeMemory s.memory s.operator (toNumber s.input)), input = Nil, display = show (computeMemory s.memory s.operator (toNumber s.input))}
-handleKey s K_Add = s { memory = Just (computeMemory s.memory s.operator (toNumber s.input)), input = Nil, operator = Just Addition }
-handleKey s K_Dot = s { input = snoc s.input K_Dot, display = s.display <> show K_Dot }
-handleKey s k = s { input = snoc s.input k, display = (if s.display == "0" then "" else s.display) <> show k }
+handleKey s K_AC =          initialState
+handleKey s K_C =           initialState { memory = s.memory, operator = s.operator }
+handleKey s K_Equal =       initialState { memory = Just (computeStatusMemory s), display = if ((computeStatusMemory s) - Math.round (computeStatusMemory s) == 0.0 ) then show (round (computeStatusMemory s)) else show (computeStatusMemory s) }
+handleKey s K_Add =         initialState { memory = Just (computeStatusMemory s), operator = Just Addition, display = s.display }
+handleKey s K_Subtract =    initialState { memory = Just (computeStatusMemory s), operator = Just Subtraction, display = s.display }
+handleKey s K_Multiple =    initialState { memory = Just (computeStatusMemory s), operator = Just Multiplication, display = s.display }
+handleKey s K_Divide =      initialState { memory = Just (computeStatusMemory s), operator = Just Division, display = s.display }
+handleKey s K_Dot = s { input = if s.digitInput then s.input else snoc s.input K_Dot, display = (if s.cleanDisplay then "0" else s.display) <> show K_Dot, cleanDisplay = false, digitInput = true}
+handleKey s k = s { input = snoc s.input k, display = (if s.cleanDisplay then show k else (if s.display == "0" then "" else s.display) <> show k), cleanDisplay = false }
 
 charToKey :: Char -> Key
 charToKey '0' = K_0
