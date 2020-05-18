@@ -19,7 +19,7 @@ import Data.Ord (class Ord)
 import Data.Ring ((-))
 import Data.Semigroup ((<>))
 import Data.Semiring ((+), (*))
-import Data.Show (show)
+import Data.Show (show, class Show)
 import Data.String.CodeUnits (toCharArray)
 import Data.String.Common (split)
 import Data.String.Pattern (Pattern(..))
@@ -37,28 +37,44 @@ import Global (readFloat)
 type Surface    = HTML.HTML
 
 data Digit = D0 | D1 | D2 | D3 | D4 | D5 | D6 | D7 | D8 | D9 
+instance showDigit :: Show Digit where
+    show D0 = "0"
+    show D1 = "1"
+    show D2 = "2"
+    show D3 = "3"
+    show D4 = "4"
+    show D5 = "5"
+    show D6 = "6"
+    show D7 = "7"
+    show D8 = "8"
+    show D9 = "9"
+
 data Action     = NoAction
                 | ClickDigit Digit
                 | ClickDot
                 | ClickOperation Operator
                 | ClickEqual
                 | Cancel
-                -- | Add -- | SubComponentOutput SubComponent.S_Output
+
 data Query a    = GetState (State -> a)
 type Input      = Unit
 data Output     = NoOutput      -- aka Message
 
 data Operator   = Addition | Subtraction | Multiplication | Division
+instance showOperator :: Show Operator where
+    show Addition       = "[+]"
+    show Subtraction    = "[-]"
+    show Multiplication = "[*]"
+    show Division       = "[/]"
+
 type Memory     = Maybe Number
 type InputValue  = Tuple (List Digit) (List Digit)
-type InputValue' = { integer :: List Digit, decimal :: List Digit }
 
 type State      = {
     memory                   :: Memory,
     operator                 :: Maybe Operator,
     isInsertingDecimalValues :: Boolean,
-    input                    :: InputValue,
-    input'                   :: InputValue'
+    input                    :: InputValue
 }
 type Slots      = ()
 
@@ -67,11 +83,10 @@ initialState _ = {
     memory:   Nothing,
     operator: Nothing,
     input:    Tuple Nil Nil,
-    input':   { integer: Nil, decimal: Nil },
     isInsertingDecimalValues: false
 }
-initialState' :: State
-initialState' = initialState unit
+initialStateValue :: State
+initialStateValue = initialState unit
 
 component :: forall m. MonadAff m => Halogen.Component Surface Query Input Output m
 component = Halogen.mkComponent {
@@ -99,14 +114,6 @@ showInput (Tuple xs Nil)  true  = showDigits xs <> "."
 showInput (Tuple Nil ys)  _     = "0." <> showDigits ys
 showInput (Tuple xs ys)   _     = showDigits xs <> "." <> showDigits ys
 
-showInput' :: InputValue' -> Boolean -> String
-showInput' {integer: Nil, decimal: Nil} false = "0"
-showInput' {integer: Nil, decimal: Nil} true = "0."
-showInput' {integer: xs,  decimal: Nil}  false = showDigits xs
-showInput' {integer: xs,  decimal: Nil}  true  = showDigits xs <> "."
-showInput' {integer: Nil, decimal: ys}   _     = "0." <> showDigits ys
-showInput' {integer: xs,  decimal: ys}   _     = showDigits xs <> "." <> showDigits ys
-
 valueOf :: Digit -> Int     -- verify if 'coercible' is applicable
 valueOf D0 = 0
 valueOf D1 = 1
@@ -123,10 +130,6 @@ updateInput :: InputValue -> Boolean -> Digit -> InputValue
 updateInput (Tuple xs ys) false d = Tuple (snoc xs d) ys
 updateInput (Tuple xs ys) true  d = Tuple  xs        (snoc ys d)
 
-updateInput' :: InputValue' -> Boolean -> Digit -> InputValue'
-updateInput' {integer: xs, decimal: ys} false d = {integer: snoc xs d, decimal: ys}
-updateInput' {integer: xs, decimal: ys} true  d = {integer: xs,        decimal: snoc ys d}
-
 operation :: Operator -> (Number -> Number -> Number)
 operation Addition       = (+)
 operation Subtraction    = (-)
@@ -138,7 +141,7 @@ computeValue :: InputValue -> Number
 computeValue = readFloat <<< ((flip showInput) false)
 
 computeMemory :: Number -> Maybe Operator -> Memory -> Memory
-computeMemory _ Nothing  _        = Nothing
+computeMemory n Nothing  _        = Just n
 computeMemory n (Just o) Nothing  = Just ((operation o) 0.0 n)
 computeMemory n (Just o) (Just m) = Just ((operation o) m   n)
 
@@ -163,7 +166,7 @@ digitsWithInteger 0 = Nil
 digitsWithInteger i = maybe Nil identity (sequence (map digitWithValue (toList (toCharArray (show i))))) 
 
 inputWithMemory :: Memory -> InputValue
-inputWithMemory Nothing  = initialState'.input
+inputWithMemory Nothing  = initialStateValue.input
 inputWithMemory (Just m) = Tuple (digitsWithInteger integerPart) (digitsWithInteger decimalPart)
     where
         splitValues = split (Pattern ".") (show m)
@@ -171,19 +174,64 @@ inputWithMemory (Just m) = Tuple (digitsWithInteger integerPart) (digitsWithInte
         integerPart = maybe 0 (round <<< readFloat) (firstOf traversed splitValues)
         decimalPart = maybe 0 (round <<< readFloat) (lastOf  traversed splitValues)
 
-inputWithMemory' :: Memory -> InputValue'
-inputWithMemory' Nothing  = initialState'.input'
-inputWithMemory' (Just m) = {integer: digitsWithInteger integerPart, decimal: digitsWithInteger decimalPart }
-    where
-        splitValues = split (Pattern ".") (show m)
---      integerPart = round m
-        integerPart = maybe 0 (round <<< readFloat) (firstOf traversed splitValues)
-        decimalPart = maybe 0 (round <<< readFloat) (lastOf  traversed splitValues)
+-- ===============================
+
+handleAction ∷ forall m. MonadAff m => Action → Halogen.HalogenM State Action Slots Output m Unit
+handleAction = case _ of
+    NoAction ->
+        pure unit
+    ClickDigit d -> do
+        s <- Halogen.get
+        let currentInput = maybe s.input  (const initialStateValue.input)  s.operator
+        let referenceState = maybe initialStateValue (const s) s.operator
+        Halogen.modify_ (\state -> referenceState {
+            input  = updateInput currentInput state.isInsertingDecimalValues d
+        })
+    ClickDot -> do
+        Halogen.modify_ (\state -> state { isInsertingDecimalValues = true })
+    ClickOperation o -> do
+        s <- Halogen.get
+        let memory' = computeMemory (computeValue s.input) s.operator s.memory
+        Halogen.modify_ (\state -> initialStateValue {
+            memory = memory',
+            operator = Just o,
+            --isInsertingDecimalValues = false,
+            input  = inputWithMemory  memory'
+        })
+    ClickEqual -> do
+        s <- Halogen.get
+        let memory' = computeMemory (computeValue s.input) s.operator s.memory
+        Halogen.modify_ (\state -> initialStateValue {
+            memory = memory',
+            operator = Nothing,
+            input  = inputWithMemory  memory'
+        })
+    Cancel -> do
+        Halogen.modify_ (\state -> state {
+            input = initialStateValue.input,
+            isInsertingDecimalValues = false
+        })
+
+
+handleQuery :: forall m a. Query a -> Halogen.HalogenM State Action Slots Output m (Maybe a)
+handleQuery = const (pure Nothing)
+
+receive :: Input -> Maybe Action
+receive = const Nothing
+
+initialize :: Maybe Action
+initialize = Just NoAction
+
+finalize :: Maybe Action
+finalize = Nothing
+
 
 render :: forall m. {-MonadAff m =>-} State -> Halogen.ComponentHTML Action Slots m
 render (state) = HTML.div [] [
-    HTML.div [HTML.Properties.class_ (Halogen.ClassName "display")] [HTML.text (showInput  state.input  state.isInsertingDecimalValues)],
-    HTML.div [HTML.Properties.class_ (Halogen.ClassName "display")] [HTML.text (showInput' state.input' state.isInsertingDecimalValues)],
+    HTML.div [HTML.Properties.class_ (Halogen.ClassName "memory")]   [HTML.text ("Memory: " <> (show state.memory))],
+    HTML.div [HTML.Properties.class_ (Halogen.ClassName "operator")] [HTML.text ("Operator: " <> (show state.operator))],
+    HTML.div [HTML.Properties.class_ (Halogen.ClassName "state")]    [HTML.text ("State: " <> (show state))],
+    HTML.div [HTML.Properties.class_ (Halogen.ClassName "display")]  [HTML.text (showInput  state.input  state.isInsertingDecimalValues)],
     HTML.table [] [
         HTML.tbody [] [
             HTML.tr [] [
@@ -211,67 +259,8 @@ render (state) = HTML.div [] [
             ],
             HTML.tr [] [
                 HTML.td [HTML.Properties.colSpan 3, HTML.Properties.class_ (Halogen.ClassName "result"), HTML.Events.onClick \_ -> Just ClickEqual] [HTML.text "="],
-                HTML.td [HTML.Properties.colSpan 1, HTML.Properties.class_ (Halogen.ClassName "cancel"), HTML.Events.onClick \_ -> Just Cancel] [HTML.text "AC"]
+                HTML.td [HTML.Properties.colSpan 1, HTML.Properties.class_ (Halogen.ClassName "cancel"), HTML.Events.onClick \_ -> Just Cancel] [HTML.text "C"]
             ]
         ]
     ]
-
 ]
-
-handleAction ∷ forall m. MonadAff m => Action → Halogen.HalogenM State Action Slots Output m Unit
-handleAction = case _ of
-    NoAction ->
-        pure unit
-    ClickDigit d -> do
-        Halogen.modify_ (\state -> state {
-            operator = Nothing,
---          input  = updateInput  (if state.operator == Nothing then state.input  else initialState'.input ) state.isInsertingDecimalValues d,
-            input  = updateInput  (maybe state.input  (const initialState'.input)  state.operator) state.isInsertingDecimalValues d,
---          input' = updateInput' (if state.operator == Nothing then state.input' else initialState'.input') state.isInsertingDecimalValues d
-            input' = updateInput' (maybe state.input' (const initialState'.input') state.operator) state.isInsertingDecimalValues d
-        })
-    ClickDot -> do
-        Halogen.modify_ (\state -> state { isInsertingDecimalValues = true })
-    ClickOperation o -> do
-        s <- Halogen.get
-        let memory = computeMemory (computeValue s.input) s.operator s.memory
-        Halogen.modify_ (\state -> initialState' {
-            memory = memory,
-            operator = Just o,
-            --isInsertingDecimalValues = false,
-            input  = inputWithMemory  memory,
-            input' = inputWithMemory' memory
-        })
-    ClickEqual -> pure unit --do
-        -- Halogen.modify_ (\state -> initialState' {
-        --     memory = computeMemory (computeValue state.input) Nothing state.memory,
-        --     operator = Nothing,
-        --     -- isInsertingDecimalValues = false,
-        --     input  = inputWithMemory  (computeMemory (computeValue state.input) Nothing state.memory),
-        --     input' = inputWithMemory' (computeMemory (computeValue state.input) Nothing state.memory)
-        --})
-    Cancel -> do
-        Halogen.modify_ (\state -> state {
-            input = initialState'.input,
-            input' = initialState'.input',
-            isInsertingDecimalValues = false
-        })
-    -- Subtract -> do
-    --     Halogen.liftEffect $ log "subtract"
-    --     Halogen.modify_ (\(State s) -> State (s - 1))
-
-
-handleQuery :: forall m a. Query a -> Halogen.HalogenM State Action Slots Output m (Maybe a)
--- handleQuery = const (pure Nothing)
-handleQuery = case _ of
-    GetState k -> do
-        Just <<< k <$> Halogen.get
-
-receive :: Input -> Maybe Action
-receive = const Nothing
-
-initialize :: Maybe Action
-initialize = Just NoAction
-
-finalize :: Maybe Action
-finalize = Nothing
