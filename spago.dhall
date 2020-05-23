@@ -1,7 +1,8 @@
 { sources = [ "src/**/*.purs", "test/**/*.purs" ]
 , name = "password-generator"
 , dependencies =
-  [ "console"
+  [ "concur-react"
+  , "console"
   , "effect"
   , "halogen"
   , "profunctor-lenses"

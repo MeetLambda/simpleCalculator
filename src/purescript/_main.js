@@ -31,4 +31,5 @@ function main () {
 
 console.log('Starting app');
 
-main();
+// main();
+window.onload = main;

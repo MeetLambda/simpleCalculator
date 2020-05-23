@@ -17,6 +17,8 @@
     "dependencies": {
         "purescript": "^0.13.6",
         "purty": "^6.2.0",
+        "react": "^16.13.1",
+        "react-dom": "^16.13.1",
         "spago": "^0.15.2"
     }
 }

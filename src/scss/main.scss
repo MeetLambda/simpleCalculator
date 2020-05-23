@@ -1,2 +1,16 @@
 @import "SimpleCalculator";
 
+div.frame {
+    border: 10px solid gold;
+    padding: 3px;
+
+    div.halogen {
+        border: 5px solid cyan;
+        padding: 3px;
+    }
+
+    div.concur {
+        border: 5px solid purple;
+        padding: 3px;
+    }
+}
