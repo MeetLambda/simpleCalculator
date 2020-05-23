@@ -16,16 +16,12 @@ import SimpleCalculator as SimpleCalculator
 
 
 applyKeys :: String -> String
-applyKeys k = (foldl SimpleCalculator.handleKey SimpleCalculator.initialState (SimpleCalculator.keys k)).display
+applyKeys k = (foldl SimpleCalculator.handleKey SimpleCalculator.initialState (SimpleCalculator.textToKeys k)).display
 
 simpleCalculatorTestSuite :: Free TestF Unit
 simpleCalculatorTestSuite =
     suite "Simple Calculator Test Suite" do
         test "trivial tests" do
-            -- Assert.assert      "2 + 2 should be 4"    $ (2 + 2) == 4
-            -- Assert.assertFalse "2 + 2 shouldn't be 5" $ (2 + 2) == 5
-            -- Assert.equal       4 (2 + 2)
-            -- Assert.expectFailure "2 + 2 shouldn't be 5" $ Assert.equal 5 (2 + 2)
             Assert.equal    "1"     (applyKeys "1")
             Assert.equal    "0.3"   (applyKeys ".3")
             Assert.equal    "5.1"   (applyKeys "4.5 + 0.6 =")

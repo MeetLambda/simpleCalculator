@@ -68,8 +68,7 @@ computeStatusMemory s = computeMemory s.operator s.memory (toNumber s.input)
 
 computeStatusDisplay :: Status -> Key -> String
 computeStatusDisplay s K_Dot    = if s.isInsertingDecimalValues then s.display else ((if s.cleanDisplayOnNextKey then emptyDisplayContent else s.display) <> show K_Dot)
-computeStatusDisplay s K_Equal  = if (x == Math.round x) then show (Data.Int.round x) else show x
-                                        where x = computeStatusMemory s 
+computeStatusDisplay s K_Equal  = if (x == Math.round x) then show (Data.Int.round x) else show x where x = computeStatusMemory s 
 computeStatusDisplay s k        = if (s.cleanDisplayOnNextKey || (s.display == emptyDisplayContent)) then show k else s.display <> show k
 
 computeStatusInput :: Status -> Key -> List Key
@@ -87,6 +86,14 @@ handleKey s K_Multiple =    initialState { memory = Just (computeStatusMemory s)
 handleKey s K_Divide =      initialState { memory = Just (computeStatusMemory s),   operator = Just Division,       display = s.display }
 handleKey s K_Dot =         s { input = (computeStatusInput s K_Dot),   display = (computeStatusDisplay s K_Dot),   cleanDisplayOnNextKey = false, isInsertingDecimalValues = true }
 handleKey s k =             s { input = (computeStatusInput s k),       display = (computeStatusDisplay s k),       cleanDisplayOnNextKey = false }
+
+-- =========================================================
+
+arrayToList :: forall a. (Array a -> List a)
+arrayToList xs = foldl snoc Nil xs
+
+textToKeys :: String -> List Key
+textToKeys s = map charToKey (arrayToList (toCharArray s))
 
 charToKey :: Char -> Key
 charToKey '0' = K_0
@@ -109,14 +116,6 @@ charToKey 'C' = K_C
 charToKey '#' = K_AC
 charToKey  _  = NOOP
 
-toList :: forall a. (Array a -> List a)
-toList xs = foldl snoc Nil xs
-
-keys :: String -> List Key
-keys s = map charToKey (toList (toCharArray s))
-
--- =========================================================
-
 instance showKey :: Show Key where
     show K_0 =          "0"
     show K_1 =          "1"
@@ -137,21 +136,3 @@ instance showKey :: Show Key where
     show K_C =          "C"
     show K_AC =         "#"
     show NOOP =         ""
-
--- instance showDigit :: Show Digit where
---     show D0 = "0"
---     show D1 = "1"
---     show D2 = "2"
---     show D3 = "3"
---     show D4 = "4"
---     show D5 = "5"
---     show D6 = "6"
---     show D7 = "7"
---     show D8 = "8"
---     show D9 = "9"
-
--- instance showOperator :: Show Operator where
---     show Addition       = "[+]"
---     show Subtraction    = "[-]"
---     show Multiplication = "[*]"
---     show Division       = "[/]"
