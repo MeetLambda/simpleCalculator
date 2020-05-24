@@ -2,12 +2,9 @@
 , name = "password-generator"
 , dependencies =
   [ "concur-react"
-  , "console"
-  , "effect"
   , "halogen"
-  , "profunctor-lenses"
-  , "psci-support"
   , "test-unit"
+  , "psci-support"
   ]
 , packages = ./packages.dhall
 }

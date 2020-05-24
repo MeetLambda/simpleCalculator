@@ -1,44 +1,19 @@
 module Components.SimpleCalculator where
 
 import Control.Applicative (pure)
-import Control.Bind (bind, discard)
 import Control.Category (identity)
-import Control.Semigroupoid ((<<<))
-import Data.Eq (class Eq, (==))
-import Data.EuclideanRing ((/))
-import Data.Foldable (foldl)
-import Data.Function (($), const, flip)
-import Data.Functor (map, (<$>))
-import Data.HeytingAlgebra ((&&), (||), not)
-import Data.Int (round)
-import Data.Lens.Fold (firstOf, lastOf)
-import Data.Lens.Traversal (traversed)
-import Data.List (snoc, null)
-import Data.List.Types (List(..), (:))
-import Data.Maybe (Maybe(..), maybe, isNothing)
-import Data.Ord (class Ord)
-import Data.Ring ((-))
-import Data.Semigroup ((<>))
-import Data.Semiring ((+), (*))
-import Data.Show (show, class Show)
-import Data.String.CodeUnits (toCharArray)
-import Data.String.Common (split)
-import Data.String.Pattern (Pattern(..))
-import Data.Traversable (sequence)
-import Data.Tuple (Tuple(..))
-import Data.Unit (Unit, unit)
+import Data.Function (($), const)
+import Data.Maybe (Maybe(..))
+import Data.Unit (Unit)
 import Effect.Aff.Class (class MonadAff)
-import Effect.Console (log)
 import Halogen as Halogen
 import Halogen.HTML as HTML
 import Halogen.HTML.Events as HTML.Events
 import Halogen.HTML.Properties as HTML.Properties
-import Global (readFloat)
 
 import SimpleCalculator as SimpleCalculator
 
 type Surface    = HTML.HTML
-
 
 data Action     = ClickKey SimpleCalculator.Key
 data Query a    = GetState (State -> a)
@@ -117,9 +92,7 @@ render (state) = HTML.div [] [
             ],
             HTML.tr [] [
                 HTML.td [HTML.Properties.colSpan 3, HTML.Properties.class_ (Halogen.ClassName "result"), HTML.Events.onClick \_ -> Just (ClickKey SimpleCalculator.K_Equal)] [HTML.text "="],
-                if (showC state)
-                    then HTML.td [HTML.Properties.colSpan 1, HTML.Properties.class_ (Halogen.ClassName "cancel"), HTML.Events.onClick \_ -> Just (ClickKey SimpleCalculator.K_C)]  [HTML.text "C"]
-                    else HTML.td [HTML.Properties.colSpan 1, HTML.Properties.class_ (Halogen.ClassName "cancel"), HTML.Events.onClick \_ -> Just (ClickKey SimpleCalculator.K_AC)] [HTML.text "AC"]
+                HTML.td [HTML.Properties.colSpan 1, HTML.Properties.class_ (Halogen.ClassName "cancel"), HTML.Events.onClick \_ -> Just (ClickKey SimpleCalculator.K_C)]  [HTML.text "C"]
             ]
         ]
     ]

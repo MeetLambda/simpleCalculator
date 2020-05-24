@@ -2,16 +2,10 @@ module Test.SimpleCalculator where
 
 import Control.Bind (discard)
 import Control.Monad.Free (Free)
-import Data.Eq ((==))
 import Data.Foldable (foldl)
-import Data.Function (($))
-import Data.Semiring ((+))
 import Data.Unit (Unit)
-import Effect (Effect)
-import Effect.Console (log)
 import Test.Unit (suite, test, TestF)
 import Test.Unit.Assert as Assert
-import Test.Unit.Main (runTest)
 import SimpleCalculator as SimpleCalculator
 
 
